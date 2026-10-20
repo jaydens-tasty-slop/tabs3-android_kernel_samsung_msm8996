@@ -1655,6 +1655,17 @@ static ssize_t reclaim_write(struct file *file, const char __user *buf,
 	if (!task)
 		return -ESRCH;
 
+	/*
+	 * The proc entry is writable at the DAC layer so Android's system_server
+	 * can open app-owned entries. Match that privilege to its existing
+	 * CAP_SYS_PTRACE grant; unprivileged apps must never reclaim another
+	 * process (or use this as a reclaim-amplification primitive).
+	 */
+	if (!capable(CAP_SYS_PTRACE)) {
+		put_task_struct(task);
+		return -EPERM;
+	}
+
 	mm = get_task_mm(task);
 	if (!mm)
 		goto out;
@@ -1672,18 +1683,20 @@ static ssize_t reclaim_write(struct file *file, const char __user *buf,
 		while (vma) {
 			if (vma->vm_start > end)
 				break;
-			if (is_vm_hugetlb_page(vma))
-				continue;
-
-			rp.vma = vma;
-			walk_page_range(max(vma->vm_start, start),
-					min(vma->vm_end, end),
-					&reclaim_walk);
+			if (!is_vm_hugetlb_page(vma) &&
+			    !(vma->vm_flags & VM_LOCKED)) {
+				rp.vma = vma;
+				walk_page_range(max(vma->vm_start, start),
+						min(vma->vm_end, end),
+						&reclaim_walk);
+			}
 			vma = vma->vm_next;
 		}
 	} else {
 		for (vma = mm->mmap; vma; vma = vma->vm_next) {
 			if (is_vm_hugetlb_page(vma))
+				continue;
+			if (vma->vm_flags & VM_LOCKED)
 				continue;
 
 			if (type == RECLAIM_ANON && vma->vm_file)

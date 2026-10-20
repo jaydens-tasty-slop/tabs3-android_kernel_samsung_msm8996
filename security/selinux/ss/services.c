@@ -635,6 +635,14 @@ void services_compute_xperms_drivers(
 		/* if allowing permissions within a driver */
 		security_xperm_set(xperms->drivers.p,
 					node->datum.u.xperms->driver);
+	} else {
+		/* New policy extensions must not change the ioctl AVC cache.
+		 * Like Android's 6.12 compatibility kernel, retain legacy
+		 * netlink permissions until NLMSG enforcement is backported.
+		 */
+		pr_warn_once("SELinux: extended permission %u is unsupported; legacy netlink permissions remain in use\n",
+			     node->datum.u.xperms->specified);
+		return;
 	}
 
 	/* If no ioctl commands are allowed, ignore auditallow and auditdeny */
@@ -960,7 +968,10 @@ void services_compute_xperms_decision(struct extended_perms_decision *xpermd,
 					xpermd->driver))
 			return;
 	} else {
-		BUG();
+		/* Modern policies can contain extensions this kernel lacks. */
+		pr_warn_once("SELinux: unknown extended permission (%u) will be ignored\n",
+			     node->datum.u.xperms->specified);
+		return;
 	}
 
 	if (node->key.specified == AVTAB_XPERMS_ALLOWED) {

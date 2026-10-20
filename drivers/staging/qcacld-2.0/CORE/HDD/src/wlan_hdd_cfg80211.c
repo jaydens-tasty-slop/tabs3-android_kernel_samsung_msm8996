@@ -16487,6 +16487,7 @@ int wlan_hdd_cfg80211_init(struct device *dev,
     if (pCfg->configPNOScanSupport)
     {
         hdd_wiphy_set_max_sched_scans(wiphy, 1);
+        wiphy->max_sched_scan_ssids = SIR_PNO_MAX_SUPP_NETWORKS;
         wiphy->max_match_sets       = SIR_PNO_MAX_SUPP_NETWORKS;
         wiphy->max_sched_scan_ie_len = SIR_MAC_MAX_IE_LENGTH;
     }
