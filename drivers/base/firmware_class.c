@@ -304,7 +304,18 @@ static const char * const fw_path[] = {
 	"/lib/firmware/" UTS_RELEASE,
 	"/lib/firmware",
 	"/lib64/firmware",
-	"/lib/firmware/image"
+	"/lib/firmware/image",
+	/*
+	 * Android keeps firmware outside /lib. Mirror ueventd's search order
+	 * so direct loads, including the suspend-time firmware cache, pick the
+	 * same image ueventd would have provided.
+	 */
+	"/etc/firmware",
+	"/odm/firmware",
+	"/vendor/firmware",
+	"/firmware/image",
+	"/vendor/firmware_mnt/image",
+	"/vendor/firmware-modem/image"
 };
 
 /*
@@ -1620,7 +1631,15 @@ static int cache_firmware(const char *fw_name)
 
 	pr_debug("%s: %s\n", __func__, fw_name);
 
-	ret = request_firmware(&fw, fw_name, NULL);
+	/*
+	 * This runs from the PM_SUSPEND_PREPARE notifier. A user helper
+	 * fallback emits firmware uevents that wake epoll(EPOLLWAKEUP)
+	 * listeners and abort every suspend attempt made more than ten
+	 * seconds after the previous resume, which Android's suspend backoff
+	 * can turn into a permanent failure loop. Caching is best-effort, so
+	 * load directly or skip the image.
+	 */
+	ret = request_firmware_direct(&fw, fw_name, NULL);
 	if (!ret)
 		kfree(fw);
 
